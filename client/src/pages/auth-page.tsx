@@ -49,10 +49,14 @@ const registerSchema = z
         .min(10, "Phone number must be at least 10 digits"),
     }),
     roleData: z.object({
-      roleType: z.enum(["USER", "BUILDER", "BROKER", "CA", "ADMIN"], {
-        required_error: "You need to select a role.",
-      }),
+      roleType: z.enum(
+        ["USER", "BROKER", "CA", "ADMIN", "BUILDER", "TELECALLER", "SALES"],
+        {
+          required_error: "You need to select a role.",
+        }
+      ),
       companyName: z.string().optional(),
+      shift: z.string().optional(),
       location: z.object({
         country: z.string().min(1, "Country is required"),
         state: z.string().min(1, "State is required"),
@@ -65,19 +69,29 @@ const registerSchema = z
       }),
     }),
   })
-  .superRefine(({ user, roleData }, ctx) => {
+  .superRefine(({ roleData }, ctx) => {
     if (
-      roleData.roleType === "BUILDER" &&
-      (!roleData.companyName || roleData.companyName.length === 0)
+      roleData.roleType === "BROKER" &&
+      (!roleData.companyName || roleData.companyName.trim().length === 0)
     ) {
       ctx.addIssue({
         code: "custom",
-        message: "Company name is required for Builders",
+        message: "Company name is required for Brokers",
         path: ["roleData.companyName"],
       });
     }
-  });
 
+    if (
+      roleData.roleType === "TELECALLER" &&
+      (!roleData.shift || roleData.shift.trim().length === 0)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Shift is required for Telecallers",
+        path: ["roleData.shift"],
+      });
+    }
+  });
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
@@ -109,6 +123,34 @@ export const resetSchema = z
 type RegisterFormData = z.infer<typeof registerSchema>;
 type LoginFormData = z.infer<typeof loginSchema>;
 
+const getErrorMessage = (error: unknown): string => {
+  if (axios.isAxiosError(error)) {
+    const responseData = error.response?.data;
+
+    if (typeof responseData === "string") {
+      return responseData;
+    } else if (responseData?.message) {
+      return responseData.message;
+    } else if (responseData?.detail) {
+      return responseData.detail;
+    } else if (responseData?.error) {
+      return responseData.error;
+    } else if (Array.isArray(responseData)) {
+      return responseData.map((err) => err.message || err).join(", ");
+    }
+
+    return (
+      error.response?.statusText || error.message || "Network error occurred"
+    );
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "An unexpected error occurred. Please try again.";
+};
+
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState("login");
   const [, navigate] = useLocation();
@@ -122,95 +164,89 @@ export default function AuthPage() {
   const loginMutation = useMutation({
     mutationFn: (credentials: LoginCredentials) =>
       authService.login(credentials),
+
     onSuccess: (response) => {
       toast.success(response.message || "Login successful!");
-      setUser(authService.getUser());
-      navigate("/dashboard");
+
+      if (response.user) {
+        localStorage.setItem("user", JSON.stringify(response.user));
+      }
+      if (response.token) {
+        localStorage.setItem("token", response.token);
+      }
+
+      const user = response.user || authService.getUser();
+      setUser(user);
+
+      const role = user?.role?.toUpperCase();
+
+      if (role !== "USER") {
+        toast.error(
+          "Only client users are allowed to login. Please login with partner login"
+        );
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+        setUser(null);
+        return;
+      }
+
+      window.location.href = "https://homobie-partner-portal.vercel.app/user";
     },
+
     onError: (error: Error) => {
-      toast.error(
-        error.message || "Login failed. Please check your credentials."
-      );
+      toast.error(getErrorMessage(error));
     },
   });
 
   const registerMutation = useMutation({
     mutationFn: async (data: Omit<RegisterFormData, "confirmPassword">) => {
       try {
-        console.log('=== REGISTRATION DEBUG ===');
-        console.log('Raw form data:', data);
-        
-        // Check for any undefined or null values
-        const checkForIssues = (obj: any, path: string = ''): string[] => {
-          const issues: string[] = [];
-          for (const [key, value] of Object.entries(obj)) {
-            const currentPath = path ? `${path}.${key}` : key;
-            if (value === null || value === undefined) {
-              issues.push(`${currentPath}: ${value}`);
-            } else if (typeof value === 'object' && value !== null) {
-              issues.push(...checkForIssues(value, currentPath));
-            } else if (typeof value === 'string' && value.trim() === '') {
-              issues.push(`${currentPath}: empty string`);
-            }
-          }
-          return issues;
-        };
-        
-        const issues = checkForIssues(data);
-        if (issues.length > 0) {
-          console.log('Potential issues found:', issues);
+        console.log("=== REGISTRATION DEBUG ===");
+        console.log("Raw form data:", data);
+
+        if (
+          !data.roleData.location.country ||
+          !data.roleData.location.state ||
+          !data.roleData.location.city
+        ) {
+          throw new Error("Please select country, state, and city");
         }
-        
-        // Create a clean payload
+
         const cleanPayload = {
           user: {
-            firstName: String(data.user.firstName || '').trim(),
-            lastName: String(data.user.lastName || '').trim(),
-            email: String(data.user.email || '').trim(),
-            phoneNumber: String(data.user.phoneNumber || '').trim(),
+            firstName: data.user.firstName.trim(),
+            lastName: data.user.lastName.trim(),
+            email: data.user.email.trim(),
+            phoneNumber: data.user.phoneNumber.trim(),
           },
           roleData: {
-            roleType: data.roleData.roleType,
-            ...(data.roleData.companyName && { 
-              companyName: String(data.roleData.companyName).trim() 
-            }),
+            roleType: "USER",
+
             location: {
-              country: String(data.roleData.location.country || '').trim(),
-              state: String(data.roleData.location.state || '').trim(),
-              city: String(data.roleData.location.city || '').trim(),
-              pincode: String(data.roleData.location.pincode || '').trim(),
-              addressLine1: String(data.roleData.location.addressLine1 || '').trim(),
+              country: data.roleData.location.country.trim(),
+              state: data.roleData.location.state.trim(),
+              city: data.roleData.location.city.trim(),
+              pincode: data.roleData.location.pincode.trim(),
+              addressLine1: data.roleData.location.addressLine1.trim(),
             },
           },
         };
-        
-        console.log('Clean payload:', JSON.stringify(cleanPayload, null, 2));
-        console.log('Payload size:', JSON.stringify(cleanPayload).length, 'bytes');
-        
+
         const response = await axios.post(
-          "https://api.homobie.com/register/user",
+          `${import.meta.env.VITE_BASE_URL}/register/user`,
           cleanPayload,
           {
             headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
+              "Content-Type": "application/json",
+              Accept: "application/json",
             },
-            timeout: 30000, // 30 second timeout
+            timeout: 30000,
           }
         );
-        
-        console.log('Registration successful:', response.data);
+
         return response;
-        
       } catch (error) {
-        console.error('=== REGISTRATION ERROR ===');
-        if (axios.isAxiosError(error)) {
-          console.error('Request config:', error.config);
-          console.error('Response status:', error.response?.status);
-          console.error('Response headers:', error.response?.headers);
-          console.error('Response data:', error.response?.data);
-          console.error('Request data sent:', error.config?.data);
-        }
+        console.error("Registration error:", error);
         throw error;
       }
     },
@@ -220,28 +256,14 @@ export default function AuthPage() {
       registerForm.reset();
     },
     onError: (error: unknown) => {
-      console.error('Registration mutation error:', error);
-      let errorMessage = "An unexpected error occurred.";
-
-      if (axios.isAxiosError(error) && error.response?.data) {
-        const responseData = error.response.data;
-        if (responseData.message) {
-          errorMessage = responseData.message;
-        } else if (responseData.detail) {
-          errorMessage = responseData.detail;
-        }
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-
-      toast.error(errorMessage);
+      toast.error(getErrorMessage(error));
     },
   });
 
   const forgotMutation = useMutation({
     mutationFn: async (data: { email: string }) => {
       const res = await axios.post(
-        `https://api.homobie.com/request-forgotPassword`,
+        `${import.meta.env.VITE_BASE_URL}/request-forgotPassword`,
         null,
         {
           params: {
@@ -253,15 +275,12 @@ export default function AuthPage() {
     },
     onSuccess: (data, variables) => {
       toast.success("OTP sent to your email! Please check your inbox.");
-      setUserEmail(variables.email); // Store the email
-      setActiveTab("otp"); // Switch to OTP tab after successful request
-      // Pre-fill the OTP form with the email
+      setUserEmail(variables.email);
+      setActiveTab("otp");
       otpForm.setValue("email", variables.email);
     },
-    onError: (err: any) => {
-      toast.error(
-        err.response?.data?.message || "Failed to send OTP. Please try again."
-      );
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -272,7 +291,7 @@ export default function AuthPage() {
       source: string;
     }) => {
       const res = await axios.post(
-        `https://api.homobie.com/reset-password`,
+        `${import.meta.env.VITE_BASE_URL}/reset-password`,
         null,
         {
           params: {
@@ -287,24 +306,20 @@ export default function AuthPage() {
     onSuccess: () => {
       toast.success("Password has been reset successfully!");
       setActiveTab("login");
-      // Reset forms
       resetForm.reset();
       forgotForm.reset();
       otpForm.reset();
       setUserEmail("");
     },
-    onError: (err: any) => {
-      toast.error(
-        err.response?.data?.message ||
-          "Something went wrong while resetting password"
-      );
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
   const otpMutation = useMutation({
     mutationFn: async (data: { email: string; otp: string }) => {
       const res = await axios.post(
-        `https://api.homobie.com/verify-Otp`,
+        `${import.meta.env.VITE_BASE_URL}/verify-Otp`,
         null,
         {
           params: {
@@ -320,10 +335,8 @@ export default function AuthPage() {
       setActiveTab("reset");
       resetForm.setValue("email", userEmail);
     },
-    onError: (err: any) => {
-      toast.error(
-        err.response?.data?.message || "Invalid OTP. Please try again."
-      );
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -344,6 +357,7 @@ export default function AuthPage() {
       roleData: {
         roleType: "USER",
         companyName: "",
+        shift: "",
         location: {
           country: "",
           state: "",
@@ -374,7 +388,7 @@ export default function AuthPage() {
       email: "",
       newPassword: "",
       confirmNewPassword: "",
-      source: "WEB", 
+      source: "WEB",
     },
   });
 
@@ -385,19 +399,6 @@ export default function AuthPage() {
   };
 
   const onRegisterSubmit = (data: RegisterFormData) => {
-    // Validate required fields before submission
-    console.log('Form data received:', data);
-    
-    if (!data.roleData.location.country || !data.roleData.location.state || !data.roleData.location.city) {
-      toast.error("Please select country, state, and city");
-      return;
-    }
-    
-    if (data.roleData.roleType === "BUILDER" && !data.roleData.companyName?.trim()) {
-      toast.error("Company name is required for Builder role");
-      return;
-    }
-    
     registerMutation.mutate(data);
   };
 
@@ -600,7 +601,6 @@ export default function AuthPage() {
                             </p>
                           </div>
 
-                          {/* Hidden email field - auto-filled */}
                           <FormField
                             control={otpForm.control}
                             name="email"
@@ -644,7 +644,6 @@ export default function AuthPage() {
                               variant="ghost"
                               className="text-[#4f46e5] text-sm font-medium hover:text-indigo-400 p-0 h-auto"
                               onClick={() => {
-                                // Resend OTP using the stored email
                                 if (userEmail) {
                                   forgotMutation.mutate({ email: userEmail });
                                 }
@@ -752,7 +751,6 @@ export default function AuthPage() {
                             )}
                           />
 
-                          {/* Hidden source field with default value */}
                           <FormField
                             control={resetForm.control}
                             name="source"
@@ -883,59 +881,50 @@ export default function AuthPage() {
                             control={registerForm.control}
                             name="roleData.roleType"
                             render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="text-white">
-                                  Role
-                                </FormLabel>
-                                <Select
-                                  onValueChange={field.onChange}
-                                  value={field.value}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger className="text-white border border-white">
-                                      <SelectValue placeholder="Select your role" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent className="bg-black text-white border border-white max-h-60 overflow-y-auto">
-                                    <SelectItem
-                                      value="USER"
-                                      className="hover:bg-gray-800"
-                                    >
-                                      Client
-                                    </SelectItem>
-                                    <SelectItem
-                                      value="BUILDER"
-                                      className="hover:bg-gray-800"
-                                    >
-                                      Builder
-                                    </SelectItem>
-                                    <SelectItem
-                                      value="BROKER"
-                                      className="hover:bg-gray-800"
-                                    >
-                                      Broker
-                                    </SelectItem>
-                                    <SelectItem
-                                      value="CA"
-                                      className="hover:bg-gray-800"
-                                    >
-                                      Chartered Accountant
-                                    </SelectItem>
-                                    <SelectItem
-                                      value="ADMIN"
-                                      className="hover:bg-gray-800"
-                                    >
-                                      Admin
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <FormMessage className="text-red-400" />
-                              </FormItem>
+                              <input type="hidden" value="USER" {...field} />
                             )}
                           />
+                          {/* Shift  */}
+                          {/* {selectedRole === "TELECALLER" && (
+                            <FormField
+                              control={registerForm.control}
+                              name="roleData.shift"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-white">
+                                    Shift
+                                  </FormLabel>
+                                  <Select
+                                    onValueChange={(value) =>
+                                      field.onChange(value)
+                                    }
+                                    value={field.value}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger className="text-white border border-white">
+                                        <SelectValue placeholder="Select Shift" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent className="bg-black text-white border border-white max-h-60 overflow-y-auto">
+                                      <SelectItem value="MORNING">
+                                        Morning
+                                      </SelectItem>
+                                      <SelectItem value="EVENING">
+                                        Evening
+                                      </SelectItem>
+                                      <SelectItem value="NIGHT">
+                                        Night
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage className="text-red-400" />
+                                </FormItem>
+                              )}
+                            />
+                          )} */}
 
-                          {/* Company (only Builder) */}
-                          {selectedRole === "BUILDER" && (
+                          {/* Company */}
+                          {/* {selectedRole === "BROKER" && (
                             <FormField
                               control={registerForm.control}
                               name="roleData.companyName"
@@ -955,7 +944,7 @@ export default function AuthPage() {
                                 </FormItem>
                               )}
                             />
-                          )}
+                          )} */}
 
                           {/* Address Details */}
                           <h3 className="text-sm font-medium pt-2 text-white">
@@ -982,7 +971,6 @@ export default function AuthPage() {
                             )}
                           />
 
-                          {/* Country / State / City */}
                           <div className="grid grid-cols-3 gap-4">
                             {/* Country */}
                             <FormField
@@ -995,19 +983,27 @@ export default function AuthPage() {
                                   </FormLabel>
                                   <Select
                                     onValueChange={(value) => {
-                                      // Find the country object to get the name
-                                      const country = Country.getAllCountries().find(c => c.isoCode === value);
-                                      field.onChange(country?.name || value); // Store country name, not ISO code
-                                      setSelectedCountry(value); // Keep ISO code for state filtering
+                                      const country =
+                                        Country.getAllCountries().find(
+                                          (c) => c.isoCode === value
+                                        );
+                                      field.onChange(country?.name || value);
+                                      setSelectedCountry(value);
                                       setSelectedState("");
                                       setSelectedCity("");
-                                      // Clear dependent fields in form
-                                      registerForm.setValue("roleData.location.state", "");
-                                      registerForm.setValue("roleData.location.city", "");
+                                      registerForm.setValue(
+                                        "roleData.location.state",
+                                        ""
+                                      );
+                                      registerForm.setValue(
+                                        "roleData.location.city",
+                                        ""
+                                      );
                                     }}
                                     value={
-                                      // Find ISO code for current country name
-                                      Country.getAllCountries().find(c => c.name === field.value)?.isoCode || ""
+                                      Country.getAllCountries().find(
+                                        (c) => c.name === field.value
+                                      )?.isoCode || ""
                                     }
                                   >
                                     <FormControl>
@@ -1042,16 +1038,22 @@ export default function AuthPage() {
                                   </FormLabel>
                                   <Select
                                     onValueChange={(value) => {
-                                      // Find the state object to get the name
-                                      const state = State.getStatesOfCountry(selectedCountry).find(s => s.isoCode === value);
-                                      field.onChange(state?.name || value); // Store state name, not ISO code
-                                      setSelectedState(value); // Keep ISO code for city filtering
+                                      const state = State.getStatesOfCountry(
+                                        selectedCountry
+                                      ).find((s) => s.isoCode === value);
+                                      field.onChange(state?.name || value);
+                                      setSelectedState(value);
                                       setSelectedCity("");
-                                      registerForm.setValue("roleData.location.city", "");
+                                      registerForm.setValue(
+                                        "roleData.location.city",
+                                        ""
+                                      );
                                     }}
                                     value={
-                                      // Find ISO code for current state name
-                                      State.getStatesOfCountry(selectedCountry).find(s => s.name === field.value)?.isoCode || ""
+                                      State.getStatesOfCountry(
+                                        selectedCountry
+                                      ).find((s) => s.name === field.value)
+                                        ?.isoCode || ""
                                     }
                                     disabled={!selectedCountry}
                                   >
@@ -1090,7 +1092,7 @@ export default function AuthPage() {
                                   </FormLabel>
                                   <Select
                                     onValueChange={(value) => {
-                                      field.onChange(value); // City name is stored directly
+                                      field.onChange(value);
                                       setSelectedCity(value);
                                     }}
                                     value={field.value}

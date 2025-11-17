@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { 
-  User, FileText, Calendar, Home, DollarSign, CircleCheck, CircleX, FileSearch, 
+  User, FileText, Calendar, Home, IndianRupee, CircleCheck, CircleX, FileSearch, 
   Users, BarChart3, PieChart, ArrowUpRight, ArrowDownRight, Search,
   InfoIcon, CheckIcon, XIcon
 } from "lucide-react";
@@ -196,7 +196,7 @@ export default function AdminPage() {
   if (!user || (user.role !== 'admin' && user.role !== 'superadmin')) {
     return (
       <div>
-        <main className="flex items-center justify-center min-h-[80vh]">
+        <main className="flex items-center justify-center min-h-[80dvh]">
           <Alert className="max-w-md">
             <InfoIcon className="h-4 w-4" />
             <AlertTitle>Access Denied</AlertTitle>
@@ -359,7 +359,7 @@ export default function AdminPage() {
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" className="h-8 w-8 p-0">
                                       <span className="sr-only">Open menu</span>
-                                      <DollarSign className="h-4 w-4" />
+                                      <IndianRupee className="h-4 w-4" />
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">

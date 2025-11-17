@@ -50,7 +50,7 @@ import {
   Check,
   ChartLine,
   Calendar,
-  DollarSign,
+  IndianRupee,
   TrendingUp,
   PieChart,
   BarChart,
@@ -338,9 +338,14 @@ export default function SipPage() {
                   <Button variant="outline" onClick={() => navigate("/")}>
                     Back to Home
                   </Button>
-                  <Button onClick={() => navigate("/dashboard")}>
-                    Go to Dashboard
-                  </Button>
+                  <Button
+  onClick={() => {
+    window.location.href = "https://homobie-partner-portal.vercel.app";
+  }}
+>
+  Go to Dashboard
+</Button>
+
                 </CardFooter>
               </Card>
             </div>
@@ -389,7 +394,7 @@ export default function SipPage() {
 
                   <div className="flex items-start">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mt-1 mr-4">
-                      <DollarSign className="text-white" />
+                      <IndianRupee className="text-white" />
                     </div>
                     <div>
                       <h3 className="font-semibold text-lg mb-1 text-white">

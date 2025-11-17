@@ -12,12 +12,11 @@ import {
 import PropertyCard from "./PropertyCard";
 import ListViewCard from "./ListViewCard";
 import PropertyFilters from "./PropertyFilters";
-import FormProperties from "./FormProperties";
 
-const baseUrl = "https://api.homobie.com";
+const baseUrl = `${import.meta.env.VITE_BASE_URL}`;
 
 // Helper function to convert byte array to image URL
-// Updated helper functions for better image handling
+// (This function remains unchanged)
 const convertByteArrayToImageUrl = (byteArray) => {
   if (!byteArray || byteArray.length === 0) {
     console.warn("Empty or null byte array provided");
@@ -53,7 +52,7 @@ const convertByteArrayToImageUrl = (byteArray) => {
     }
 
     // Create blob with proper MIME type detection
-    let mimeType = "image/jpeg"; // default
+    let mimeType = "image/jpeg";
 
     // Simple MIME type detection based on file signature
     if (uint8Array.length > 4) {
@@ -76,21 +75,52 @@ const convertByteArrayToImageUrl = (byteArray) => {
   }
 };
 
-// Helper function to convert multiple byte arrays to image URLs
-const convertImagesToUrls = (images) => {
-  if (!images || !Array.isArray(images)) {
-    console.warn("Invalid images array provided");
+// **NEW HELPER FUNCTION**
+// Helper function to convert the new media map (Map<String, List<byte[]>>) to image URLs
+const convertMediaMapToUrls = (mediaMap) => {
+  if (!mediaMap || typeof mediaMap !== "object") {
     return [];
   }
 
-  return images
-    .map((byteArray, index) => {
-      const url = convertByteArrayToImageUrl(byteArray);
-      console.log(`Converted image ${index}:`, url);
-      return url;
-    })
-    .filter((url) => url !== "/placeholder.jpg"); // Remove failed conversions
+  const urls = [];
+
+  // 1. Get the main image
+  const mainImages = mediaMap["PROPERTY_MEDIA_MAIN"];
+  if (mainImages && Array.isArray(mainImages) && mainImages.length > 0) {
+    // Add the first main image (or all, if you allow multiple main)
+    urls.push(convertByteArrayToImageUrl(mainImages[0]));
+  }
+
+  // 2. Get the other images
+  const otherImages = mediaMap["PROPERTY_MEDIA_OTHERS"];
+  if (otherImages && Array.isArray(otherImages)) {
+    otherImages.forEach((img) => {
+      urls.push(convertByteArrayToImageUrl(img));
+    });
+  }
+
+  // 3. Fallback: If no main/other keys are found (e.g., old data or different key)
+  // try to parse all images from all lists in the map.
+  if (urls.length === 0) {
+    Object.values(mediaMap).forEach((imageList) => {
+      if (Array.isArray(imageList)) {
+        imageList.forEach((img) => {
+          urls.push(convertByteArrayToImageUrl(img));
+        });
+      }
+    });
+  }
+
+  // If still no URLs, add a placeholder
+  if (urls.length === 0) {
+    urls.push("/placeholder.jpg");
+  }
+
+  return urls.filter((url, index) => url !== "/placeholder.jpg" || index === 0);
 };
+
+// This function is no longer used by fetchAllProperties or fetchIndividualProperty
+// const convertImagesToUrls = (images) => { ... };
 
 const savePropertyToList = (newProperty) => {
   const existingProperties = JSON.parse(
@@ -109,7 +139,7 @@ const handleAddProperty = async (propertyData) => {
   }
 };
 
-// Auth helper functions
+// Auth helper functions (Unchanged)
 const getAuthTokens = () => {
   const authUser = localStorage.getItem("auth_user");
   return {
@@ -135,7 +165,7 @@ const api = axios.create({
   },
 });
 
-// Request interceptor - only add token if it exists
+// Request interceptor (Unchanged)
 api.interceptors.request.use(
   (config) => {
     const { token } = getAuthTokens();
@@ -147,7 +177,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor - only handle token refresh if user is authenticated
+// Response interceptor (Unchanged)
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -204,13 +234,125 @@ const Properties = () => {
   const [allProperties, setAllProperties] = useState([]);
   const [isSliding, setIsSliding] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isAuthChecking, setIsAuthChecking] = useState(false); // Set to false since we don't need auth check
+  const [isAuthChecking, setIsAuthChecking] = useState(false);
   const [error, setError] = useState(null);
   const [showAuthRedirect, setShowAuthRedirect] = useState(false);
   const scrollContainerRef = useRef(null);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [propertiesPerPage] = useState(6);
+
   const cardWidth = 374;
 
+  // Pagination helper functions (Unchanged)
+  const getPaginatedProperties = () => {
+    const startIndex = (currentPage - 1) * propertiesPerPage;
+    const endIndex = startIndex + propertiesPerPage;
+    return filteredProperties.slice(startIndex, endIndex);
+  };
+
+  const getTotalPages = () => {
+    return Math.ceil(filteredProperties.length / propertiesPerPage);
+  };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filters]);
+
+  // Pagination (Unchanged)
+  const Pagination = () => {
+    const totalPages = getTotalPages();
+    const startItem = (currentPage - 1) * propertiesPerPage + 1;
+    const endItem = Math.min(
+      currentPage * propertiesPerPage,
+      filteredProperties.length
+    );
+
+    if (totalPages <= 1) return null;
+
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-6 border-t border-white/10">
+        <div className="text-white/60 text-sm">
+          Showing {startItem}-{endItem} of {filteredProperties.length}{" "}
+          properties
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Previous button */}
+          <button
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className={`p-2 rounded-lg transition-all duration-300 ${
+              currentPage === 1
+                ? "bg-white/5 text-white/30 cursor-not-allowed"
+                : "bg-white/10 text-white hover:bg-white/20"
+            }`}
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+
+          {/* Page numbers */}
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+              (pageNumber) => {
+                const shouldShow =
+                  pageNumber === 1 ||
+                  pageNumber === totalPages ||
+                  Math.abs(pageNumber - currentPage) <= 1;
+
+                const shouldShowEllipsis =
+                  (pageNumber === 2 && currentPage > 4) ||
+                  (pageNumber === totalPages - 1 &&
+                    currentPage < totalPages - 3);
+
+                if (!shouldShow && !shouldShowEllipsis) return null;
+
+                if (shouldShowEllipsis) {
+                  return (
+                    <span key={pageNumber} className="px-2 py-1 text-white/60">
+                      ...
+                    </span>
+                  );
+                }
+
+                return (
+                  <button
+                    key={pageNumber}
+                    onClick={() => setCurrentPage(pageNumber)}
+                    className={`px-3 py-2 rounded-lg transition-all duration-300 text-sm font-medium ${
+                      currentPage === pageNumber
+                        ? "bg-white text-black"
+                        : "bg-white/10 text-white hover:bg-white/20"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                );
+              }
+            )}
+          </div>
+
+          {/* Next button */}
+          <button
+            onClick={() =>
+              setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+            }
+            disabled={currentPage === totalPages}
+            className={`p-2 rounded-lg transition-all duration-300 ${
+              currentPage === totalPages
+                ? "bg-white/5 text-white/30 cursor-not-allowed"
+                : "bg-white/10 text-white hover:bg-white/20"
+            }`}
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // checkAuth (Unchanged)
   const checkAuth = (showError = true) => {
     const { token, userId, userData } = getAuthTokens();
 
@@ -227,6 +369,8 @@ const Properties = () => {
     return true;
   };
 
+  // **UPDATED fetchIndividualProperty**
+  // To parse the IndividualPropertyDetailResponse DTO
   const fetchIndividualProperty = async (propertyId) => {
     setIsLoading(true);
     setError(null);
@@ -235,32 +379,33 @@ const Properties = () => {
       const response = await api.get(
         `${baseUrl}/properties/getIndividualProperty?propertyId=${propertyId}`
       );
-      console.log("Individual Property Response:", response.data);
 
       if (response.data) {
         // Transform the individual property data to match the expected structure
         const transformedProperty = {
           id: response.data.propertyId,
           propertyId: response.data.propertyId,
-          ownerName: response.data.ownerName,
+          // ownerName is not in the new DTO
+          // ownerName: response.data.ownerName,
           property: {
             title: response.data.title,
             type: response.data.type,
             constructionStatus: response.data.constructionStatus,
-            propertyStatus: response.data.propertyStatus,
-            location: response.data.location,
+            propertyStatus: response.data.status, // DTO has 'status'
+            location: response.data.location, // DTO has 'location' (LocationResponse)
             actualPrice: response.data.actualPrice,
             discountPrice: response.data.discountPrice,
-            price: response.data.actualPrice,
-            // Add any other property fields that might be in the response
+            price: response.data.actualPrice, // For backward compatibility
             description: response.data.description,
             bedrooms: response.data.bedrooms,
             bathrooms: response.data.bathrooms,
-            squareFeet: response.data.squareFeet,
+            squareFeet: response.data.areaSqft, // DTO has 'areaSqft' (String)
             furnishing: response.data.furnishing,
-            amenities: response.data.amenities,
+            amenities: response.data.amenities, // DTO has 'amenities'
+            propertyFeatures: response.data.propertyFeatures, // DTO has 'propertyFeatures'
           },
-          files: convertImagesToUrls(response.data.images),
+          // Use the new helper and the correct DTO field 'mediaFiles'
+          files: convertMediaMapToUrls(response.data.mediaFiles),
         };
 
         // Update localStorage with the fetched property
@@ -286,7 +431,7 @@ const Properties = () => {
     }
   };
 
-  // Helper function to get individual property from localStorage or fetch from API
+  // getIndividualProperty (Unchanged)
   const getIndividualProperty = async (propertyId = null) => {
     const targetPropertyId =
       propertyId || localStorage.getItem("currentPropertyId");
@@ -313,6 +458,8 @@ const Properties = () => {
     return await fetchIndividualProperty(targetPropertyId);
   };
 
+  // **UPDATED fetchAllProperties**
+  // To parse the PropertyListResponse DTO
   const fetchAllProperties = async (pincode = "") => {
     setIsLoading(true);
     setError(null);
@@ -323,31 +470,31 @@ const Properties = () => {
         : `/properties/allProperties`;
 
       const res = await api.get(url);
-      console.log("API Response:", res.data);
 
       if (res.data && Array.isArray(res.data)) {
         // Transform the data to match the new DTO structure
         const transformedProperties = res.data.map((item) => ({
           id: item.propertyId, // Map propertyId to id for consistency
           propertyId: item.propertyId,
-          ownerName: item.ownerName,
+          // ownerName is not in the new DTO
+          // ownerName: item.ownerName,
           property: {
             title: item.title,
             type: item.type,
             constructionStatus: item.constructionStatus,
             propertyStatus: item.propertyStatus,
-            location: item.location,
+            location: item.location, // DTO has 'location' (LocationResponse)
             actualPrice: item.actualPrice,
             discountPrice: item.discountPrice,
             price: item.actualPrice, // Keep for backward compatibility
           },
-          files: convertImagesToUrls(item.images), // Convert byte arrays to URLs
+          // Use the new helper and the correct DTO field 'images' (which is the map)
+          files: convertMediaMapToUrls(item.images),
         }));
 
         setAllProperties(transformedProperties);
 
         // Since there's no isFeatured field, we'll use the first 6 properties as featured
-        // or you can implement your own logic (e.g., highest priced, most recent, etc.)
         setFeaturedProperties(transformedProperties.slice(0, 6));
       } else {
         throw new Error("Invalid data format received");
@@ -360,7 +507,11 @@ const Properties = () => {
     }
   };
 
+  // **UPDATED addProperty**
+  // To send files with PROPERTY_MEDIA_MAIN and PROPERTY_MEDIA_OTHERS keys
   const addProperty = async (newProperty) => {
+    // newProperty format is: { property: {...}, coverImage: File, otherImages: [File, File] }
+
     // Check authentication before adding property
     if (!checkAuth()) {
       setShowAuthRedirect(true);
@@ -391,6 +542,7 @@ const Properties = () => {
         areaSqft: parseInt(propertyData.areaSqft, 10) || 0,
         // Handle the location object
         location: {
+          addressLine1: propertyData.location?.addressLine1 || "", // Added addressLine1
           addressLine2: propertyData.location?.addressLine2 || "",
           city: propertyData.location?.city || "",
           country: propertyData.location?.country || "",
@@ -414,13 +566,21 @@ const Properties = () => {
         })
       );
 
-      if (newProperty.files?.length > 0) {
-        Array.from(newProperty.files).forEach((file) => {
-          formData.append("files", file);
-        });
+      // **NEW FILE LOGIC**
+      // Append the cover image with the main key
+      if (newProperty.coverImage) {
+        formData.append("PROPERTY_MEDIA_MAIN", newProperty.coverImage);
       } else {
-        throw new Error("At least one image is required");
+        throw new Error("Cover image is required");
       }
+
+      // Append other images with the others key
+      if (newProperty.otherImages && newProperty.otherImages.length > 0) {
+        newProperty.otherImages.forEach((file) => {
+          formData.append("PROPERTY_MEDIA_OTHERS", file);
+        });
+      }
+      // Note: It's okay if otherImages is empty.
 
       const res = await api.post("/properties/add", formData, {
         headers: {
@@ -456,12 +616,15 @@ const Properties = () => {
 
       if (propertyId) {
         localStorage.setItem("currentPropertyId", propertyId);
-        localStorage.setItem("currentProperty", JSON.stringify(responseData));
-        console.log("Property saved to localStorage with ID:", propertyId);
+
+        // Fetch the newly created property to get all correct data
+        // (since responseData might not match our transformed structure)
+        await fetchIndividualProperty(propertyId);
+        console.log("Property saved. Fetched new details for ID:", propertyId);
 
         // Refresh the property list to show the new property
         await fetchAllProperties(filters.pincode);
-        return responseData;
+        return responseData; // Return the raw response from /add
       } else {
         console.error(
           "No propertyId found in response. Response structure:",
@@ -490,10 +653,12 @@ const Properties = () => {
     }
   };
 
+  // handleFilterChange (Unchanged)
   const handleFilterChange = (name, value) => {
     setFilters((prev) => ({ ...prev, [name]: value }));
   };
 
+  // scrollToCard (Unchanged)
   const scrollToCard = (direction) => {
     if (!scrollContainerRef.current || isSliding) return;
 
@@ -519,19 +684,12 @@ const Properties = () => {
     requestAnimationFrame(animateScroll);
   };
 
+  // filteredProperties (Unchanged)
   const filteredProperties =
     currentView === "featured"
       ? featuredProperties
       : allProperties.filter((item) => {
           if (!item.property) return false;
-
-          // Debug logging
-          console.log("Filtering item:", {
-            title: item.property.title,
-            bedrooms: item.property.bedrooms,
-            filterBedrooms: filters.bedrooms,
-            type: typeof item.property.bedrooms,
-          });
 
           // Search term matching (make it optional - only filter if search term exists)
           const searchMatch =
@@ -555,21 +713,13 @@ const Properties = () => {
               const selectedBedrooms = filters.bedrooms;
               const propertyBedrooms = parseInt(item.property.bedrooms); // Ensure it's a number
 
-              console.log("Bedroom comparison:", {
-                selected: selectedBedrooms,
-                property: propertyBedrooms,
-                propertyRaw: item.property.bedrooms,
-              });
-
               if (selectedBedrooms === "4") {
                 // "4+ BHK" should show 4 or more bedrooms
                 const result = propertyBedrooms >= 4;
-                console.log("4+ match result:", result);
                 return result;
               } else {
                 // For 1, 2, 3 - exact match
                 const result = propertyBedrooms === parseInt(selectedBedrooms);
-                console.log("Exact match result:", result);
                 return result;
               }
             })();
@@ -607,18 +757,6 @@ const Properties = () => {
             cityMatch &&
             stateMatch;
 
-          console.log("Filter results:", {
-            title: item.property.title,
-            searchMatch,
-            bedroomMatch,
-            typeMatch,
-            priceMatch,
-            pincodeMatch,
-            cityMatch,
-            stateMatch,
-            finalResult,
-          });
-
           return finalResult;
         });
 
@@ -643,8 +781,10 @@ const Properties = () => {
     );
   }
 
+  // --- RENDER (JSX) ---
+  // (Unchanged except for props passed to PropertyCard/ListViewCard)
   return (
-    <div className="min-h-screen text-white pt-[100px] bg-black">
+    <div className="min-h-screen text-white pt-[100px] bg-black z-10">
       {/* Header */}
       <div className="border-b border-white/10  backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 py-8">
@@ -675,7 +815,7 @@ const Properties = () => {
             </div>
           )}
 
-          <FormProperties onAddProperty={addProperty} />
+          {/* <FormProperties onAddProperty={addProperty} /> */}
 
           <div className="flex gap-8 mb-6">
             <button
@@ -786,27 +926,36 @@ const Properties = () => {
                 onFilterChange={handleFilterChange}
               />
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setViewMode("grid")}
-                className={`p-3 rounded-xl backdrop-blur-md border transition-all duration-300 ${
-                  viewMode === "grid"
-                    ? "bg-white/20 text-white border-white/30"
-                    : "bg-white/5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                <Grid className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={`p-3 rounded-xl backdrop-blur-md border transition-all duration-300 ${
-                  viewMode === "list"
-                    ? "bg-white/20 text-white border-white/30"
-                    : "bg-white/5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                <List className="w-5 h-5" />
-              </button>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={`p-3 rounded-xl backdrop-blur-md border transition-all duration-300 ${
+                    viewMode === "grid"
+                      ? "bg-white/20 text-white border-white/30"
+                      : "bg-white/5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <Grid className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`p-3 rounded-xl backdrop-blur-md border transition-all duration-300 ${
+                    viewMode === "list"
+                      ? "bg-white/20 text-white border-white/30"
+                      : "bg-white/5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <List className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Results count */}
+              <div className="text-white/60 text-sm">
+                {filteredProperties.length}{" "}
+                {filteredProperties.length === 1 ? "property" : "properties"}{" "}
+                found
+              </div>
             </div>
           </div>
         </div>
@@ -861,7 +1010,8 @@ const Properties = () => {
                       <PropertyCard
                         property={item.property}
                         files={item.files}
-                        ownerName={item.ownerName}
+                        // Use a fallback since ownerName is not in the DTO
+                        ownerName={item.ownerName || "Owner"}
                         isSlider={true}
                       />
                     </a>
@@ -871,7 +1021,7 @@ const Properties = () => {
             </div>
           ) : viewMode === "list" ? (
             <div className="space-y-6">
-              {filteredProperties.map((item) => (
+              {getPaginatedProperties().map((item) => (
                 <Link
                   key={item.propertyId}
                   href={`/properties/${item.propertyId}`}
@@ -887,44 +1037,59 @@ const Properties = () => {
                     <ListViewCard
                       property={item.property}
                       files={item.files}
-                      ownerName={item.ownerName}
+                      // Use a fallback since ownerName is not in the DTO
+                      ownerName={item.ownerName || "Owner"}
                     />
                   </a>
                 </Link>
               ))}
+
+              {/* Pagination for List View */}
+              <Pagination />
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredProperties.map((item) => (
-                <Link
-                  key={item.propertyId}
-                  href={`/properties/${item.propertyId}`}
-                  onClick={() => {
-                    localStorage.setItem("currentPropertyId", item.propertyId);
-                    localStorage.setItem(
-                      "currentProperty",
-                      JSON.stringify(item)
-                    );
-                  }}
-                >
-                  <a className="block">
-                    <PropertyCard
-                      property={item.property}
-                      files={item.files}
-                      ownerName={item.ownerName}
-                      isSlider={false}
-                    />
-                  </a>
-                </Link>
-              ))}
+            <div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {getPaginatedProperties().map((item) => (
+                  <Link
+                    key={item.propertyId}
+                    href={`/properties/${item.propertyId}`}
+                    onClick={() => {
+                      localStorage.setItem(
+                        "currentPropertyId",
+                        item.propertyId
+                      );
+                      localStorage.setItem(
+                        "currentProperty",
+                        JSON.stringify(item)
+                      );
+                    }}
+                  >
+                    <a className="block">
+                      <PropertyCard
+                        property={item.property}
+                        files={item.files}
+                        // Use a fallback since ownerName is not in the DTO
+                        ownerName={item.ownerName || "Owner"}
+                        isSlider={false}
+                      />
+                    </a>
+                  </Link>
+                ))}
+              </div>
+
+              {/* Pagination for Grid View */}
+              <Pagination />
             </div>
           )}
 
           {filteredProperties.length === 0 && (
             <div className="text-center py-16">
               <Home className="w-20 h-20 mx-auto mb-6 text-white/60" />
-              <p className="text-2xl mb-2">No properties found</p>
-              <p className="text-sm">Try adjusting your search criteria</p>
+              <p className="text-2xl mb-2 text-white/80">No properties found</p>
+              <p className="text-white/60">
+                Try adjusting your search criteria
+              </p>
             </div>
           )}
         </div>
