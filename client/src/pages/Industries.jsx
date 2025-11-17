@@ -1,21 +1,67 @@
-import React from 'react';
+import React from "react";
 
 export const Industries = () => {
   const partnerNBFCs = [
-    { name: "L&T Finance", logoUrl: "https://www.ltfinance.com/assets/images/lt-logo.png" },
-    { name: "Tata Capital", logoUrl: "https://retailonline.tatacapital.com/assets/images/TataCapitalLogo.svg" },
-    { name: "Aditya Birla Capital", logoUrl: "https://careers.adityabirla.com/assets/images/logo/logo.png" },
-    { name: "Muthoot Finance", logoUrl: "https://cdn.muthootfinance.com/sites/default/files/files/logo_0.webp" },
-    { name: "Shriram Finance", logoUrl: "https://cdn.shriramfinance.in/sfl-fe/assets/images/sfl-logo.webp" },
-    { name: "Cholamandalam", logoUrl: "https://files.cholamandalam.com/assets/images/chola_logo.svg" },
-    { name: "Mahindra Finance", logoUrl: "https://www.mahindrafinance.com/wp-content/uploads/2023/05/mahindra-finance-logo.png" },
-    { name: "Bajaj Finance", logoUrl: "https://www.bajajgroup.company/wp-content/uploads/2024/05/Bajajlogo3.jpg" },
-    { name: "HDB Financial Services", logoUrl: "https://www.hdbfs.com/sites/default/files/images/logo_2021.svg" },
-    { name: "ICICI Home Finance", logoUrl: "https://campaigns.icicibank.com/hl/homeLoan/nca/dist/img/icici_logo.webp" },
-    { name: "PNB Housing Finance", logoUrl: "https://www.pnbhousing.com/documents/d/guest/logo-header?download=true" },
-    { name: "LIC Housing Finance", logoUrl: "https://www.lichousing.com/images/lic-hfl-logo.svg" },
+    {
+      name: "L&T Finance",
+      logoUrl: "https://www.ltfinance.com/assets/images/lt-logo.png",
+    },
+    {
+      name: "Tata Capital",
+      logoUrl:
+        "https://retailonline.tatacapital.com/assets/images/TataCapitalLogo.svg",
+    },
+    {
+      name: "Aditya Birla Capital",
+      logoUrl: "https://careers.adityabirla.com/assets/images/logo/logo.png",
+    },
+    {
+      name: "Muthoot Finance",
+      logoUrl:
+        "https://cdn.muthootfinance.com/sites/default/files/files/logo_0.webp",
+    },
+    {
+      name: "Shriram Finance",
+      logoUrl:
+        "https://cdn.shriramfinance.in/sfl-fe/assets/images/sfl-logo.webp",
+    },
+    {
+      name: "Cholamandalam",
+      logoUrl: "https://files.cholamandalam.com/assets/images/chola_logo.svg",
+    },
+    {
+      name: "Mahindra Finance",
+      logoUrl:
+        "https://www.mahindrafinance.com/wp-content/uploads/2023/05/mahindra-finance-logo.png",
+    },
+    {
+      name: "Bajaj Finance",
+      logoUrl:
+        "https://www.bajajgroup.company/wp-content/uploads/2024/05/Bajajlogo3.jpg",
+    },
+    {
+      name: "HDB Financial Services",
+      logoUrl: "https://www.hdbfs.com/sites/default/files/images/logo_2021.svg",
+    },
+    {
+      name: "ICICI Home Finance",
+      logoUrl:
+        "https://campaigns.icicibank.com/hl/homeLoan/nca/dist/img/icici_logo.webp",
+    },
+    {
+      name: "PNB Housing Finance",
+      logoUrl:
+        "https://www.pnbhousing.com/documents/d/guest/logo-header?download=true",
+    },
+    {
+      name: "LIC Housing Finance",
+      logoUrl: "https://www.lichousing.com/images/lic-hfl-logo.svg",
+    },
     { name: "DHFL", logoUrl: "https://www.dhfl.com/images/logo.png" },
-    { name: "Capri Global", logoUrl: "https://www.capriloans.in/Assets/capri_logo.svg" },
+    {
+      name: "Capri Global",
+      logoUrl: "https://www.capriloans.in/Assets/capri_logo.svg",
+    },
   ];
 
   const featuredPartners = [
@@ -78,11 +124,11 @@ export const Industries = () => {
               </div>
 
               {/* Role */}
-              <div className="text-center md:-mt-6">
+              {/* <div className="text-center md:-mt-6">
                 <p className="text-gray-300 text-xs md:text-sm font-medium px-2">
                   {partner.role}
                 </p>
-              </div>
+              </div> */}
             </div>
           ))}
         </div>

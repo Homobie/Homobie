@@ -22,8 +22,6 @@ import { useRoute } from "wouter";
 // API Configuration
 const BASE_URL = `${import.meta.env.VITE_BASE_URL}`;
 
-
-
 // Debug function to analyze image data
 const debugImageData = (imageData, index = 0) => {
   console.log(`=== DEBUG Image ${index} ===`);
@@ -89,16 +87,30 @@ const convertImageDataToUrl = (imageData) => {
       }
     }
 
-    // Handle byte arrays
+    // Handle byte arrays reliably using Blob
     if (imageData instanceof Uint8Array || Array.isArray(imageData)) {
       const bytes =
         imageData instanceof Uint8Array ? imageData : new Uint8Array(imageData);
-      const binary = bytes.reduce(
-        (acc, byte) => acc + String.fromCharCode(byte),
-        ""
-      );
-      const base64 = btoa(binary);
-      return `data:image/jpeg;base64,${base64}`;
+
+      if (bytes.length === 0) {
+        console.warn("Byte array is empty.");
+        return null;
+      }
+
+      // Simple MIME type detection
+      let mimeType = "image/jpeg"; // Default
+      if (bytes.length > 4) {
+        const signature = Array.from(bytes.slice(0, 4))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+        if (signature.startsWith("8950")) mimeType = "image/png";
+        else if (signature.startsWith("4749")) mimeType = "image/gif";
+        else if (signature.startsWith("ffd8")) mimeType = "image/jpeg";
+      }
+
+      const blob = new Blob([bytes], { type: mimeType });
+      // Create a local URL for the blob
+      return URL.createObjectURL(blob);
     }
 
     console.warn("Unsupported image data format:", typeof imageData, imageData);
@@ -120,7 +132,7 @@ const convertImageArrayToUrls = (imageArray) => {
 
   for (let i = 0; i < imageArray.length; i++) {
     const imgData = imageArray[i];
-    debugImageData(imgData, i);
+    // debugImageData(imgData, i); // Optional: uncomment for deep debugging
 
     const url = convertImageDataToUrl(imgData);
     if (url) {
@@ -187,17 +199,51 @@ const processPropertyData = (rawData) => {
   let imageUrls = [];
 
   // Check different possible image fields
+  // This will check rawData.images, then rawData.mediaFiles, etc.
   const imageSources = [
-    rawData.images,
-    rawData.mediaFiles,
+    rawData.mediaFiles, // From IndividualPropertyDetailResponse
+    rawData.images, // From PropertyListResponse (if that's what's passed)
     rawData.imageUrls, // if already processed
   ];
 
   for (const source of imageSources) {
-    if (source && Array.isArray(source) && source.length > 0) {
-      console.log("Found images array with length:", source.length);
+    if (!source) continue;
+
+    // Handle the Map/Object structure from your DTO
+    // e.g., { "PROPERTY_MEDIA_MAIN": [...], "PROPERTY_MEDIA_OTHERS": [...] }
+    if (typeof source === "object" && !Array.isArray(source)) {
+      console.log("Found images as an object/map. Extracting...");
+      const allImageByteArrays = [];
+
+      // Prioritize known keys
+      if (Array.isArray(source["PROPERTY_MEDIA_MAIN"])) {
+        allImageByteArrays.push(...source["PROPERTY_MEDIA_MAIN"]);
+      }
+      if (Array.isArray(source["PROPERTY_MEDIA_OTHERS"])) {
+        allImageByteArrays.push(...source["PROPERTY_MEDIA_OTHERS"]);
+      }
+
+      // If no known keys found, just grab all valid arrays from the object's values
+      if (allImageByteArrays.length === 0) {
+        Object.values(source).forEach((list) => {
+          if (Array.isArray(list)) {
+            allImageByteArrays.push(...list);
+          }
+        });
+      }
+
+      // If we found any images, convert them
+      if (allImageByteArrays.length > 0) {
+        imageUrls = convertImageArrayToUrls(allImageByteArrays);
+        if (imageUrls.length > 0) break; // Stop after finding and processing images
+      }
+    }
+
+    // Fallback: Handle if it's already an array (e.g., rawData.imageUrls)
+    else if (Array.isArray(source) && source.length > 0) {
+      console.log("Found images as a plain array.");
       imageUrls = convertImageArrayToUrls(source);
-      if (imageUrls.length > 0) break;
+      if (imageUrls.length > 0) break; // Stop after finding and processing images
     }
   }
 
@@ -227,13 +273,13 @@ const processPropertyData = (rawData) => {
     // Categorization
     type: rawData.type || "N/A",
     category: rawData.category || "N/A",
-    status: rawData.status || "N/A",
+    status: rawData.status || "N/A", // 'status' from IndividualPropertyDetailResponse
     furnishing: rawData.furnishing || "N/A",
     constructionStatus: rawData.constructionStatus || "N/A",
 
-    // Location
+    // Location (from LocationResponse)
     location: {
-      address: rawData.location?.address,
+      address: rawData.location?.addressLine1 || "",
       city: rawData.location?.city || "",
       state: rawData.location?.state || "",
       pincode: rawData.location?.pincode || "",
@@ -257,7 +303,7 @@ const processPropertyData = (rawData) => {
   return processedProperty;
 };
 
-// FIXED: Simple image component with better loading and error states
+// Simple image component with onClick on all states
 const PropertyImage = ({ src, alt, className, onClick, loading = "lazy" }) => {
   const [imageState, setImageState] = useState("loading");
   const [imgRef, setImgRef] = useState(null);
@@ -302,6 +348,7 @@ const PropertyImage = ({ src, alt, className, onClick, loading = "lazy" }) => {
     return (
       <div
         className={`${className} bg-gray-800 flex items-center justify-center text-white/60`}
+        onClick={onClick} // Click handler here
       >
         <div className="text-center">
           <div className="text-4xl mb-2">🖼️</div>
@@ -316,6 +363,7 @@ const PropertyImage = ({ src, alt, className, onClick, loading = "lazy" }) => {
     return (
       <div
         className={`${className} bg-gray-800 flex items-center justify-center`}
+        onClick={onClick} // Click handler here
       >
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white"></div>
       </div>
@@ -328,7 +376,7 @@ const PropertyImage = ({ src, alt, className, onClick, loading = "lazy" }) => {
       src={src}
       alt={alt}
       className={className}
-      onClick={onClick}
+      onClick={onClick} // Click handler here
       loading={loading}
       onError={() => {
         console.error("Image failed to display:", src.substring(0, 50) + "...");
@@ -339,7 +387,7 @@ const PropertyImage = ({ src, alt, className, onClick, loading = "lazy" }) => {
 };
 
 const PropertyDetail = () => {
-  const [match, params] = useRoute("/properties/:propertyId"); 
+  const [match, params] = useRoute("/properties/:propertyId");
   const propertyIdFromUrl = params?.propertyId;
 
   const [property, setProperty] = useState(null);
@@ -371,7 +419,9 @@ const PropertyDetail = () => {
       const propertyId = propertyIdFromUrl;
 
       if (!propertyId) {
-        setError("Property ID not found in URL. Please select a property to view.");
+        setError(
+          "Property ID not found in URL. Please select a property to view."
+        );
         setIsLoading(false);
         return;
       }
@@ -395,7 +445,8 @@ const PropertyDetail = () => {
           const favorites = JSON.parse(
             sessionStorage.getItem("favorites") || "[]"
           );
-          setIsFavorite(favorites.includes(propertyId));
+          // Commented out to prevent crash
+          // setIsFavorite(favorites.includes(propertyId));
         } catch {
           sessionStorage.setItem("favorites", "[]");
         }
@@ -408,7 +459,7 @@ const PropertyDetail = () => {
     };
 
     fetchPropertyDetail();
-  }, []);
+  }, [propertyIdFromUrl]);
 
   // Memoized calculations
   const discountPercentage = useMemo(() => {
@@ -565,7 +616,8 @@ const PropertyDetail = () => {
                 <PropertyImage
                   src={property.imageUrls[0]}
                   alt={property.title}
-                  className="w-full h-96 object-cover rounded-xl cursor-pointer"
+                  // RESPONSIVE FIX: Adjusted height for mobile
+                  className="w-full h-64 sm:h-80 lg:h-96 object-cover rounded-xl cursor-pointer"
                   onClick={() => {
                     setSelectedImageIndex(0);
                     setShowImageModal(true);
@@ -585,7 +637,8 @@ const PropertyDetail = () => {
                     <PropertyImage
                       src={imageUrl}
                       alt={`${property.title} ${index + 2}`}
-                      className="w-full h-44 object-cover rounded-xl cursor-pointer"
+                      // RESPONSIVE FIX: Adjusted height for mobile
+                      className="w-full h-32 sm:h-44 object-cover rounded-xl cursor-pointer"
                       onClick={() => {
                         setSelectedImageIndex(index + 1);
                         setShowImageModal(true);
@@ -623,9 +676,12 @@ const PropertyDetail = () => {
           {/* Main Content */}
           <div className="lg:col-span-2">
             <div className="flex items-start justify-between mb-4">
-              <h1 className="text-4xl font-bold flex-1">{property.title}</h1>
+              {/* RESPONSIVE FIX: Smaller text on mobile */}
+              <h1 className="text-3xl sm:text-4xl font-bold flex-1">
+                {property.title}
+              </h1>
               {discountPercentage > 0 && (
-                <div className="bg-green-500/20 text-green-400 px-3 py-1 rounded-full text-sm font-semibold">
+                <div className="bg-green-500/20 text-green-400 px-3 py-1 rounded-full text-sm font-semibold ml-4">
                   {discountPercentage}% OFF
                 </div>
               )}
@@ -718,14 +774,16 @@ const PropertyDetail = () => {
 
           {/* Sidebar */}
           <div className="lg:col-span-1">
-            <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/20 rounded-2xl p-6 sticky top-24">
+            {/* RESPONSIVE FIX: Sticky only on large screens */}
+            <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/20 rounded-2xl p-6 lg:sticky top-24">
               <div className="mb-6 text-center">
                 <h3 className="text-lg font-medium mb-3 text-white/80">
                   Price
                 </h3>
                 {property.discountPrice ? (
                   <div>
-                    <p className="text-4xl font-bold text-green-400 mb-1">
+                    {/* RESPONSIVE FIX: Smaller text on mobile */}
+                    <p className="text-3xl sm:text-4xl font-bold text-green-400 mb-1">
                       ₹{property.discountPrice.toLocaleString()}
                     </p>
                     <p className="text-white/60 line-through text-lg">
@@ -739,7 +797,8 @@ const PropertyDetail = () => {
                     </p>
                   </div>
                 ) : (
-                  <p className="text-4xl font-bold">
+                  // RESPONSIVE FIX: Smaller text on mobile
+                  <p className="text-3xl sm:text-4xl font-bold">
                     ₹{property.actualPrice.toLocaleString()}
                   </p>
                 )}
@@ -794,18 +853,24 @@ const PropertyDetail = () => {
               </div>
 
               <div className="space-y-3">
-                <button className="w-full bg-white text-black py-3 rounded-xl font-semibold hover:bg-white/90 transition-all duration-300 flex items-center justify-center gap-2 group">
+                <a
+                  href="tel:+917770867232"
+                  className="w-full bg-white text-black py-3 rounded-xl font-semibold hover:bg-white/90 transition-all duration-300 flex items-center justify-center gap-2 group"
+                >
                   <Phone className="w-5 h-5 group-hover:rotate-12 transition-transform" />
                   Contact Our Team
-                </button>
-                <button className="w-full border border-white/20 text-white py-3 rounded-xl font-semibold hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2">
+                </a>
+                {/* <button className="w-full border border-white/20 text-white py-3 rounded-xl font-semibold hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2">
                   <Calendar className="w-5 h-5" />
                   Schedule Visit
-                </button>
-                <button className="w-full border border-white/20 text-white py-3 rounded-xl font-semibold hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2">
+                </button> */}
+                <a
+                  href="mailto:support@homobie.com"
+                  className="w-full border border-white/20 text-white py-3 rounded-xl font-semibold hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2"
+                >
                   <Mail className="w-5 h-5" />
                   Send Enquiry
-                </button>
+                </a>
               </div>
             </div>
           </div>
@@ -827,7 +892,8 @@ const PropertyDetail = () => {
               <button
                 onClick={() => setShowImageModal(false)}
                 aria-label="Close image gallery"
-                className="absolute -top-4 -right-4 z-10 bg-white/10 hover:bg-white/20 text-white p-2 rounded-full transition-colors"
+                // RESPONSIVE FIX: Move button inside on small screens
+                className="absolute top-2 right-2 sm:-top-4 sm:-right-4 z-10 bg-white/10 hover:bg-white/20 text-white p-2 rounded-full transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
