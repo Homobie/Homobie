@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, ForwardRefExoticComponent, RefAttributes } from "react"; // Added new imports
 import { UseFormReturn } from "react-hook-form";
 import { useLocation } from "wouter";
 import { Country, State, City } from "country-state-city";
@@ -35,12 +35,35 @@ import {
   ChevronLeft,
   Lightbulb,
   X,
+  LucideProps, // Added new import
 } from "lucide-react";
 import { useToast } from "../../hooks/use-toast";
 import { LoanFormValues } from "./loan-application-types";
 
+// --- NEW TYPE DEFINITIONS TO FIX THE ERROR ---
+type IconType = ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
+
+type QuestionOption = {
+  value: string;
+  label: string;
+  icon?: IconType; // <-- Made icon optional
+};
+
+type Question = {
+  id: string;
+  title: string;
+  type: string;
+  options?: QuestionOption[]; // <-- Applied new option type
+  inputType?: string;
+  placeholder?: string;
+  description?: string;
+};
+// --- END OF NEW TYPES ---
+
+
 const getQuestions = (loanType: string) => {
-  const baseQuestions = [
+  // --- APPLIED THE NEW QUESTION[] TYPE HERE ---
+  const baseQuestions: Question[] = [
     {
       id: "finalise",
       title: "Have you finalized a property?",
@@ -106,21 +129,8 @@ const getQuestions = (loanType: string) => {
         inputType: "number",
         placeholder: "Enter property value (₹)",
         description: "Estimated market value of the property",
-      },
-      {
-        id: "propertyAddressLine1",
-        title: "What is the property address?",
-        type: "input",
-        inputType: "text",
-        placeholder: "House/Flat number, Street name, Area",
-        description: "Property location details",
-      },
-      {
-        id: "propertyLocation",
-        title: "Where is the property located?",
-        type: "location",
-        description: "Select country, state, city and enter pincode",
       }
+      // Removed the 'propertyAddressLine1' and 'propertyLocation' questions
     );
   }
 
@@ -183,8 +193,8 @@ const getQuestions = (loanType: string) => {
       title: "What is your employment type?",
       type: "choice",
       options: [
-        { value: "salaried", label: "Salaried Employee" },
-        { value: "self-employed", label: "Self-Employed" },
+        { value: "salaried", label: "Salaried Employee" }, // No icon, now valid
+        { value: "self-employed", label: "Self-Employed" }, // No icon, now valid
       ],
     },
     {
@@ -213,6 +223,14 @@ const getQuestions = (loanType: string) => {
     }
   );
 
+  baseQuestions.push({
+    id: "contactInfo",
+    title: "Finally, please provide your contact details.",
+    type: "contact",
+    description: "We'll use this to get in touch about your application.",
+    placeholder: "",
+  });
+
   return baseQuestions;
 };
 
@@ -238,8 +256,22 @@ export const MultiStepLoanForm = ({
   const progress = ((currentStep + 1) / questions.length) * 100;
 
   const handleNext = async () => {
-    const fieldPath = currentQuestion.id as any;
-    const isValid = await form.trigger(fieldPath);
+    let isValid;
+    const currentType = currentQuestion.type;
+
+    if (currentType === "contact") {
+      isValid = await form.trigger(["fullName", "email", "phoneNumber"]);
+    } else if (currentType === "location") {
+      isValid = await form.trigger([
+        "propertyCountry",
+        "propertyState",
+        "propertyCity",
+        "propertyPincode",
+      ]);
+    } else {
+      const fieldPath = currentQuestion.id as any;
+      isValid = await form.trigger(fieldPath);
+    }
 
     if (isValid) {
       if (currentQuestion.id === "finalise") {
@@ -280,7 +312,7 @@ export const MultiStepLoanForm = ({
             <FormItem className="space-y-6">
               <div className="space-y-4">
                 {currentQuestion.options?.map((option) => {
-                  const Icon = option.icon;
+                  const Icon = option.icon; // This is now safe
                   const isSelected = field.value === option.value;
                   return (
                     <button
@@ -296,6 +328,7 @@ export const MultiStepLoanForm = ({
                           : "border-gray-700 bg-gray-800/50 hover:border-gray-600 hover:bg-gray-800"
                       }`}
                     >
+                      {/* This check was already correct and handles missing icons */}
                       {Icon && <Icon className="h-6 w-6 text-white" />}
                       <span className="text-lg font-medium text-white">
                         {option.label}
@@ -457,6 +490,71 @@ export const MultiStepLoanForm = ({
       );
     }
 
+    if (currentQuestion.type === "contact") {
+      return (
+        <div className="space-y-6">
+          <FormField
+            control={form.control}
+            name="fullName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-white text-base">Full Name</FormLabel>
+                <FormControl>
+                  <Input
+                    className="bg-gray-800 border-gray-700 text-white h-14 text-lg placeholder:text-gray-500"
+                    placeholder="Enter your full name"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage className="text-red-400" />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-white text-base">Email Address</FormLabel>
+                <FormControl>
+                  <Input
+                    className="bg-gray-800 border-gray-700 text-white h-14 text-lg placeholder:text-gray-500"
+                    type="email"
+                    placeholder="Enter your email"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage className="text-red-400" />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="phoneNumber"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-white text-base">Phone Number</FormLabel>
+                <FormControl>
+                  <Input
+                    className="bg-gray-800 border-gray-700 text-white h-14 text-lg placeholder:text-gray-500"
+                    type="tel"
+                    placeholder="Enter your phone number"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage className="text-red-400" />
+              </FormItem>
+            )}
+          />
+          {currentQuestion.description && (
+            <FormDescription className="text-gray-400">
+              {currentQuestion.description}
+            </FormDescription>
+          )}
+        </div>
+      );
+    }
+
     if (currentQuestion.type === "textarea") {
       return (
         <FormField
@@ -484,6 +582,7 @@ export const MultiStepLoanForm = ({
       );
     }
 
+    // Default input renderer
     return (
       <FormField
         key={`${currentQuestion.id}-${currentStep}`}

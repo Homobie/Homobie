@@ -149,6 +149,19 @@ export const loanFormSchema = z
       required_error: "Please select your employment type",
     }),
     existingLoanDetails: existingLoanDetailsSchema,
+
+    // --- ADDED NEW FIELDS HERE ---
+    fullName: z.string().min(2, {
+      message: "Full name must be at least 2 characters.",
+    }),
+    email: z.string().email({
+      message: "Please enter a valid email address.",
+    }),
+    phoneNumber: z.string().min(10, {
+      message: "Phone number must be at least 10 digits.",
+    }),
+    // --- END OF NEW FIELDS ---
+    
   })
   .refine(
     (data) => {
@@ -217,7 +230,9 @@ export const apiClient = async <T>(endpoint: string, method = "POST", body?: any
     }
 
     const text = await response.text();
-    return text ? (JSON.parse(text) as T) : ({} as T);
+    // Return the raw text directly.
+    // We cast it to T to satisfy the generic function signature.
+    return text as T;
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof ApiError) {
@@ -240,10 +255,10 @@ export const getUserId = () => {
 export const getLoanTypeFromParam = (loanType: string) => {
   switch (loanType) {
     case "lap":
-      return "LAP";
+      return "Lap";
     case "bt-topup":
-      return "BT_TOPUP";
+      return "BT TopUp";
     default:
-      return "HOME_LOAN";
+      return "Home Loan";
   }
 };
