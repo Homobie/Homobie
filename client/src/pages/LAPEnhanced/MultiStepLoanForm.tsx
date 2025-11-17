@@ -225,9 +225,9 @@ const getQuestions = (loanType: string) => {
 
   baseQuestions.push({
     id: "contactInfo",
-    title: "Finally, please provide your contact details.",
+    title: "Contact Details.",
     type: "contact",
-    description: "We'll use this to get in touch about your application.",
+    description: "",
     placeholder: "",
   });
 
