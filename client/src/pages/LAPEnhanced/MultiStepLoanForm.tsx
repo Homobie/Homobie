@@ -93,7 +93,7 @@ const getQuestions = (loanType: string) => {
       type: "input",
       inputType: "number",
       placeholder: "Enter loan amount (₹)",
-      description: "Minimum: ₹1,00,000 | Maximum: ₹5,00,000",
+      description: "Minimum: ₹1,00,000",
     },
     {
       id: "tenure",

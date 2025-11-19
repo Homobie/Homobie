@@ -78,7 +78,6 @@ export const loanFormSchema = z
         invalid_type_error: "Please enter a valid amount",
       })
         .min(100000, "Loan amount must be at least ₹1,00,000")
-        .max(500000, "Loan amount cannot exceed ₹5,00,000")
     ),
     tenure: z.preprocess(
       (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
