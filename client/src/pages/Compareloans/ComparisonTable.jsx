@@ -1,72 +1,10 @@
 import React from "react";
-import RecommendationCard from "./RecommendationCard";
-import {
-  calculateEMI,
-  calculateTotalInterest,
-  calculateProcessingFee,
-  calculateTotalCost,
-  formatCurrency,
-} from "./utils";
 
 const ComparisonTable = ({
   selectedLoans,
-  sortBy,
-  setSortBy,
   onBack,
   getCategoryDisplayName,
 }) => {
-  const sortedSelectedLoans = [...selectedLoans].sort((a, b) => {
-    const aEMI = calculateEMI(a.principal, a.interestRate, a.termYears);
-    const bEMI = calculateEMI(b.principal, b.interestRate, b.termYears);
-    const aTotalInterest = calculateTotalInterest(
-      a.principal,
-      aEMI,
-      a.termYears
-    );
-    const bTotalInterest = calculateTotalInterest(
-      b.principal,
-      bEMI,
-      b.termYears
-    );
-    const aProcessingFee = calculateProcessingFee(a.principal, a.processingFee);
-    const bProcessingFee = calculateProcessingFee(b.principal, b.processingFee);
-    const aTotalCost = calculateTotalCost(
-      a.principal,
-      aTotalInterest,
-      aProcessingFee
-    );
-    const bTotalCost = calculateTotalCost(
-      b.principal,
-      bTotalInterest,
-      bProcessingFee
-    );
-
-    switch (sortBy) {
-      case "emi":
-        return aEMI - bEMI;
-      case "interestRate":
-        return a.interestRate - b.interestRate;
-      case "totalCost":
-        return aTotalCost - bTotalCost;
-      case "processingFee":
-        return a.processingFee - b.processingFee;
-      default:
-        return 0;
-    }
-  });
-
-  const getRecommendations = () => {
-    const bestEMI = sortedSelectedLoans[0];
-    const lowestRate = [...sortedSelectedLoans].sort(
-      (a, b) => a.interestRate - b.interestRate
-    )[0];
-   const highestLoan = [...sortedSelectedLoans].sort(
-    (a, b) => (b.maxLoanAmount || 0) - (a.maxLoanAmount || 0)
-  )[0];
-
-  return { bestEMI, lowestRate, highestLoan };
-};
-  const recommendations = getRecommendations();
 
   return (
     <div className="min-h-screen bg-black text-white p-6 relative overflow-hidden">
@@ -94,270 +32,113 @@ const ComparisonTable = ({
               Comparing {selectedLoans.length} selected loans
             </p>
           </div>
-
-          {/* Sort Controls */}
-          <div>
-            <label className="text-white/70 font-semibold mr-2">Sort by:</label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="bg-white/10 backdrop-blur-sm text-white border border-white/20 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 transition duration-300"
-              style={{ color: "white", backgroundColor: "black" }} 
-            >
-              <option
-                value="emi"
-                style={{ backgroundColor: "black", color: "white" }}
-              >
-                Monthly EMI (Low to High)
-              </option>
-              <option
-                value="interestRate"
-                style={{ backgroundColor: "black", color: "white" }}
-              >
-                Interest Rate (Low to High)
-              </option>
-              <option
-                value="totalCost"
-                style={{ backgroundColor: "black", color: "white" }}
-              >
-                Total Cost (Low to High)
-              </option>
-            </select>
-          </div>
         </div>
 
-        {/* Transposed Comparison Table */}
+        {/* Comparison Table */}
         <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden mb-8 shadow-2xl">
           <div className="overflow-x-auto">
             <table className="w-full border-separate border-spacing-0 text-center">
               <thead>
                 <tr className="bg-white/10 backdrop-blur-sm">
-                  <th className="p-4 text-white/80 font-semibold sticky text-center border-r border-white/20 min-w-[140px]">
+                  <th className="p-4 text-white/80 font-semibold sticky left-0 z-20 bg-black/40 backdrop-blur-md border-r border-white/20 min-w-[180px] text-left">
                     Features
                   </th>
-                  {sortedSelectedLoans.map((loan, index) => (
+                  {selectedLoans.map((loan) => (
                     <th
                       key={loan.id}
-                      className={`text-center p-4 text-white/80 font-semibold min-w-[150px] ${
-                        index < sortedSelectedLoans.length - 1
-                          ? "border-r border-white/20"
-                          : ""
-                      }`}
+                      className="text-center p-4 text-white font-bold text-lg min-w-[200px] border-r border-white/10"
                     >
-                      {loan.name}
+                      <div className="flex flex-col items-center gap-2">
+                        {loan.logo && (
+                            <div className="w-12 h-12 bg-white rounded-full p-1 overflow-hidden shadow-sm">
+                                <img src={loan.logo} alt="logo" className="w-full h-full object-contain"/>
+                            </div>
+                        )}
+                        {loan.name}
+                      </div>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {/* Lender Row */}
-                <tr className="hover:bg-white/10 transition-colors duration-300 border-b border-white/20">
-                  <td className="p-4 font-semibold text-white sticky left-0 border-r border-white/20 bg-white/5">
-                    Lender
-                  </td>
-                  {sortedSelectedLoans.map((loan, index) => (
-                    <td
-                      key={loan.id}
-                      className={`p-4 text-center border-r border-white/20 border-b border-white/20`}
-                    >
-                      <div className="font-semibold text-white">
-                        {loan.name}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        Max: {formatCurrency(loan.maxLoanAmount)}
-                      </div>
-                    </td>
-                  ))}
+                {/* Bank Type */}
+                <tr className="hover:bg-white/5 border-b border-white/10">
+                   <td className="p-4 text-white/70 font-medium sticky left-0 bg-black/20 backdrop-blur-sm border-r border-white/20 text-left">
+                       Bank Type
+                   </td>
+                   {selectedLoans.map(loan => (
+                       <td key={loan.id} className="p-4 border-r border-white/10 text-white">
+                           {loan.bankType}
+                       </td>
+                   ))}
                 </tr>
 
-                {/* Loan Amount Row */}
-                <tr className="hover:bg-white/10 transition-colors duration-300 border-b border-white/20">
-                  <td className="p-4 font-semibold text-white sticky left-0 border-r border-white/20 bg-white/5">
-                    Loan Amount
-                  </td>
-                  {sortedSelectedLoans.map((loan, index) => (
-                    <td
-                      key={loan.id}
-                      className={`p-4 text-center border-r border-white/20 border-b border-white/20`}
-                    >
-                      <div className="font-semibold text-green-400">
-                        {formatCurrency(loan.principal)}
-                      </div>
-                    </td>
-                  ))}
-                </tr>
-                {/* Interest Rate Row */}
-                <tr className="hover:bg-white/10 transition-colors duration-300 border-b border-white/20">
-                  <td className="p-4 font-semibold text-white sticky left-0 border-r border-white/20 bg-white/5">
+                {/* Interest Rate */}
+                <tr className="hover:bg-white/5 border-b border-white/10">
+                  <td className="p-4 text-white/70 font-medium sticky left-0 bg-black/20 backdrop-blur-sm border-r border-white/20 text-left">
                     Interest Rate
                   </td>
-                  {sortedSelectedLoans.map((loan, index) => (
-                    <td
-                      key={loan.id}
-                      className={`p-4 text-center border-r border-white/20 border-b border-white/20`}
-                    >
-                      <div className="font-semibold text-white">
-                        {loan.interestRate}% p.a.
+                  {selectedLoans.map((loan) => (
+                    <td key={loan.id} className="p-4 border-r border-white/10">
+                      <div className="font-bold text-white text-lg">
+                        {loan.interestRateDisplay}
                       </div>
                     </td>
                   ))}
                 </tr>
 
-                {/* Term Row */}
-                <tr className="hover:bg-white/10 transition-colors duration-300 border-b border-white/20">
-                  <td className="p-4 font-semibold text-white sticky left-0 border-r border-white/20 bg-white/5">
-                    Term
+                {/* Loan Amount */}
+                <tr className="hover:bg-white/5 border-b border-white/10">
+                   <td className="p-4 text-white/70 font-medium sticky left-0 bg-black/20 backdrop-blur-sm border-r border-white/20 text-left">
+                       Loan Amount
+                   </td>
+                   {selectedLoans.map(loan => (
+                       <td key={loan.id} className="p-4 border-r border-white/10 text-white">
+                           {loan.loanAmountDisplay}
+                       </td>
+                   ))}
+                </tr>
+
+                {/* Age Eligibility */}
+                <tr className="hover:bg-white/5 border-b border-white/10">
+                   <td className="p-4 text-white/70 font-medium sticky left-0 bg-black/20 backdrop-blur-sm border-r border-white/20 text-left">
+                       Age Eligibility
+                   </td>
+                   {selectedLoans.map(loan => (
+                       <td key={loan.id} className="p-4 border-r border-white/10 text-white">
+                           {loan.ageDisplay}
+                       </td>
+                   ))}
+                </tr>
+
+                {/* Tenure */}
+                <tr className="hover:bg-white/5 border-b border-white/10">
+                   <td className="p-4 text-white/70 font-medium sticky left-0 bg-black/20 backdrop-blur-sm border-r border-white/20 text-left">
+                       Max Tenure
+                   </td>
+                   {selectedLoans.map(loan => (
+                       <td key={loan.id} className="p-4 border-r border-white/10 text-white">
+                           {loan.tenureDisplay}
+                       </td>
+                   ))}
+                </tr>
+
+                {/* Credit Score */}
+                <tr className="hover:bg-white/5 border-b border-white/10">
+                  <td className="p-4 text-white/70 font-medium sticky left-0 bg-black/20 backdrop-blur-sm border-r border-white/20 text-left">
+                    Min CIBIL Score
                   </td>
-                  {sortedSelectedLoans.map((loan, index) => (
-                    <td
-                      key={loan.id}
-                      className={`p-4 text-center border-r border-white/20 border-b border-white/20`}
-                    >
-                      <div className="text-white">{loan.termYears} years</div>
+                  {selectedLoans.map((loan) => (
+                    <td key={loan.id} className="p-4 border-r border-white/10">
+                      <span className="bg-green-500/20 text-green-400 px-3 py-1 rounded-full text-sm font-bold">
+                        {loan.cibilScore}+
+                      </span>
                     </td>
                   ))}
                 </tr>
-
-                {/* Monthly EMI Row */}
-                <tr className="hover:bg-white/10 transition-colors duration-300 border-b border-white/20">
-                  <td className="p-4 font-semibold text-white sticky left-0 border-r border-white/20 bg-white/5">
-                    Monthly EMI
-                  </td>
-                  {sortedSelectedLoans.map((loan, index) => {
-                    const emi = calculateEMI(
-                      loan.principal,
-                      loan.interestRate,
-                      loan.termYears
-                    );
-                    return (
-                      <td
-                        key={loan.id}
-                        className={`p-4 text-center border-r border-white/20 border-b border-white/20`}
-                      >
-                        <div className="font-bold text-[#4f46e5] text-lg">
-                          {formatCurrency(emi)}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-
-                {/* Total Interest Row */}
-                <tr className="hover:bg-white/10 transition-colors duration-300 border-b border-white/20">
-                  <td className="p-4 font-semibold text-white sticky left-0 border-r border-white/20 bg-white/5">
-                    Total Interest
-                  </td>
-                  {sortedSelectedLoans.map((loan, index) => {
-                    const emi = calculateEMI(
-                      loan.principal,
-                      loan.interestRate,
-                      loan.termYears
-                    );
-                    const totalInterest = calculateTotalInterest(
-                      loan.principal,
-                      emi,
-                      loan.termYears
-                    );
-                    return (
-                      <td
-                        key={loan.id}
-                        className={`p-4 text-center border-r border-white/20 border-b border-white/20`}
-                      >
-                        <div className="font-semibold text-white">
-                          {formatCurrency(totalInterest)}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-                {/* Total Cost Row */}
-                <tr className="hover:bg-white/10 transition-colors duration-300 border-b border-white/20">
-                  <td className="p-4 font-semibold text-white sticky left-0 border-r border-white/20 bg-white/5">
-                    Total Cost
-                  </td>
-                  {sortedSelectedLoans.map((loan, index) => {
-                    const emi = calculateEMI(
-                      loan.principal,
-                      loan.interestRate,
-                      loan.termYears
-                    );
-                    const totalInterest = calculateTotalInterest(
-                      loan.principal,
-                      emi,
-                      loan.termYears
-                    );
-                    const processingFee = calculateProcessingFee(
-                      loan.principal,
-                      loan.processingFee
-                    );
-                    const totalCost = calculateTotalCost(
-                      loan.principal,
-                      totalInterest,
-                      processingFee
-                    );
-                    return (
-                      <td
-                        key={loan.id}
-                        className={`p-4 text-center border-r border-white/20 border-b border-white/20`}
-                      >
-                        <div className="font-bold text-white text-lg">
-                          {formatCurrency(totalCost)}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-
-                {/* Credit Score Row */}
-                <tr className="hover:bg-white/10 transition-colors duration-300 border-b border-white/20">
-                  <td className="p-4 font-semibold text-white sticky left-0 border-r border-white/20 bg-white/5">
-                    Credit Score
-                  </td>
-                  {sortedSelectedLoans.map((loan, index) => (
-                    <td
-                      key={loan.id}
-                      className={`p-4 text-center border-r border-white/20 border-b border-white/20`}
-                    >
-                      <div className="text-gray-300">
-                        <span className="text-white">
-                          {loan.creditScoreMin}+
-                        </span>
-                      </div>
-                    </td>
-                  ))}
-                </tr>
-
               </tbody>
             </table>
           </div>
-        </div>
-
-        {/* Recommendation Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <RecommendationCard
-            title="Best EMI"
-            loan={recommendations.bestEMI}
-            value={formatCurrency(
-              calculateEMI(
-                recommendations.bestEMI.principal,
-                recommendations.bestEMI.interestRate,
-                recommendations.bestEMI.termYears
-              )
-            )}
-            subtitle="per month"
-          />
-          <RecommendationCard
-            title="Lowest Rate"
-            loan={recommendations.lowestRate}
-            value={`${recommendations.lowestRate.interestRate}%`}
-            subtitle="per annum"
-          />
-          <RecommendationCard
-    title="Maximum Loan"
-    loan={recommendations.highestLoan}
-    value={formatCurrency(recommendations.highestLoan.maxLoanAmount)}
-    subtitle="available"
-  />
         </div>
       </div>
     </div>

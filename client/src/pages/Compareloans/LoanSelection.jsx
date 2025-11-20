@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import LoanCard from "./LoanCard";
+import PaginationControls from "./PaginationControls";
 
 const LoanSelection = ({
   selectedCategory,
@@ -9,13 +10,12 @@ const LoanSelection = ({
   onCompare,
   onBack,
   getCategoryDisplayName,
+  loading, // Receive loading state from parent
+  page,    // Receive current page
+  hasMore, // Receive hasMore flag
+  onPageChange // Receive handler
 }) => {
-  const [loading, setLoading] = useState(true);
-   useEffect(() => {
-    if (availableLoans && availableLoans.length > 0) {
-      setLoading(false);
-    }
-  }, [availableLoans]);
+  
   return (
     <div className="min-h-screen bg-black text-white p-6 relative overflow-hidden">
       {/* Background blur elements */}
@@ -26,11 +26,12 @@ const LoanSelection = ({
       </div>
 
       <div className="max-w-7xl mx-auto pt-20 relative z-10">
+        {/* Header Section */}
         <div className="flex flex-col md:flex-row items-start justify-between mb-8">
           <div>
             <button
               onClick={onBack}
-              className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg mb-4 transition duration-300 backdrop-blur-sm"
+              className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg mb-4 transition duration-300 backdrop-blur-sm border border-white/10"
             >
               ← Back to Categories
             </button>
@@ -46,10 +47,10 @@ const LoanSelection = ({
             <button
               onClick={onCompare}
               disabled={selectedLoans.length < 2}
-              className={`px-6 py-2 rounded-lg font-semibold transition duration-300 backdrop-blur-sm ${
+              className={`px-6 py-2 rounded-lg font-semibold transition duration-300 backdrop-blur-sm border border-white/10 ${
                 selectedLoans.length >= 2
-                  ? "bg-blue-600 hover:bg-blue-500 text-white"
-                  : "bg-white/20 text-white/50 cursor-not-allowed"
+                  ? "bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]"
+                  : "bg-white/10 text-white/50 cursor-not-allowed"
               }`}
             >
               Compare ({selectedLoans.length})
@@ -57,22 +58,43 @@ const LoanSelection = ({
           </div>
         </div>
 
- {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="w-12 h-12 border-4 border-white-500 border-t-transparent rounded-full animate-spin"></div>
+        {/* Content Section */}
+        {loading ? (
+          <div className="flex flex-col justify-center items-center h-64">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-white/50 animate-pulse">Fetching best rates...</p>
           </div>
         ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {availableLoans.map((loan) => (
-            <LoanCard
-              key={loan.id}
-              loan={loan}
-              isSelected={selectedLoans.find((l) => l.id === loan.id)}
-              onSelect={onLoanSelect}
-              className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl shadow-2xl transition-all duration-300 hover:bg-white/10"
-          />
-            ))}
-          </div>
+          <>
+            {/* Grid - REVERTED TO ORIGINAL 2-COLUMN LAYOUT */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {availableLoans.map((loan) => (
+                <LoanCard
+                  key={loan.id}
+                  loan={loan}
+                  isSelected={!!selectedLoans.find((l) => l.id === loan.id)}
+                  onSelect={onLoanSelect}
+                />
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            {availableLoans.length > 0 && (
+              <PaginationControls 
+                page={page}
+                hasMore={hasMore}
+                onPageChange={onPageChange}
+                loading={loading}
+              />
+            )}
+            
+            {/* Empty State fallback */}
+            {availableLoans.length === 0 && (
+              <div className="text-center py-20 text-white/50">
+                No loans found for this category.
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

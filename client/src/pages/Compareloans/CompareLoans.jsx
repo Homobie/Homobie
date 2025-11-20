@@ -3,21 +3,29 @@ import CategorySelection from "./CategorySelection";
 import LoanSelection from "./LoanSelection";
 import ComparisonTable from "./ComparisonTable";
 import { loanCategories } from "./loanData";
+import { formatRangeValue, formatToIndianCurrency } from "./utils";
 
 const CompareLoans = () => {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [showComparison, setShowComparison] = useState(false);
   const [showLoanList, setShowLoanList] = useState(false);
   const [selectedLoans, setSelectedLoans] = useState([]);
-  const [sortBy, setSortBy] = useState("emi");
   const [availableLoans, setAvailableLoans] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Pagination States
+  const [page, setPage] = useState(0);
+  const pageSize = 4; // Ensure this matches backend default if needed
+  const [hasMore, setHasMore] = useState(true);
 
   const handleCategorySelect = (category) => {
     setSelectedCategory(category);
     setShowLoanList(true);
     setSelectedLoans([]);
     setShowComparison(false);
+    setPage(0);
+    setHasMore(true);
+    setAvailableLoans([]); // Clear previous loans immediately
   };
 
   const handleLoanSelection = (loan) => {
@@ -48,57 +56,100 @@ const CompareLoans = () => {
     setSelectedLoans([]);
     setSelectedCategory("");
     setAvailableLoans([]);
+    setPage(0);
   };
 
   const backToLoanSelection = () => {
     setShowComparison(false);
   };
 
-  useEffect(() => {
-  if (!selectedCategory) return;
-  const fetchLoans = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `${
-          import.meta.env.VITE_BASE_URL
-        }/banks/compare?loanType=${selectedCategory}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error("Failed to fetch loans");
-      const data = await response.json();
-      
-      // reform
-       const transformedLoans = Array.isArray(data) ? data.map((loan, index) => ({
-        id: `${loan.bankName}-${index}`,
-        name: loan.bankName,
-        bankType: loan.bankType,
-        principal: loan.minLoanAmount || 0,
-        maxLoanAmount: loan.maxLoanAmount,
-        interestRate: loan.interestRate,
-        termYears: loan.maxTenure,
-        creditScoreMin: loan.minCibilScore,
-        approvalTime: "N/A", 
-        minIncomeRequired: loan.minIncomeRequired,
-      })) : [];
-
-      setAvailableLoans(transformedLoans);
-      
-    } catch (error) {
-      console.error("Error fetching loans:", error);
-      setAvailableLoans([]);
-    } finally {
-      setLoading(false);
+  const handlePageChange = (newPage) => {
+    if (newPage >= 0 && (hasMore || newPage < page)) {
+      setPage(newPage);
+      // Scroll to top smoothly when page changes
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
-  fetchLoans();
-}, [selectedCategory]);
+
+  useEffect(() => {
+    if (!selectedCategory) return;
+
+    const fetchLoans = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(
+          `${
+            import.meta.env.VITE_BASE_URL
+          }/banks/compare?loanType=${selectedCategory}&page=${page}&size=${pageSize}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (!response.ok) throw new Error("Failed to fetch loans");
+        const data = await response.json();
+
+        if (Array.isArray(data)) {
+          // Determine if we have more pages based on if we received a full page
+          setHasMore(data.length === pageSize);
+        }
+
+        // MAP DTO TO COMPONENT STATE
+        const transformedLoans = Array.isArray(data)
+          ? data.map((loan, index) => ({
+              id: `${loan.bankName}-${index}`, // Unique ID
+              name: loan.bankName,
+              bankType: loan.bankType,
+
+              // Interest Rate: "Starting from"
+              interestRateDisplay: formatRangeValue(
+                loan.minInterestRate,
+                loan.maxInterestRate,
+                "%",
+                "start"
+              ),
+
+              // Loan Amount
+              loanAmountDisplay: `upto ${formatToIndianCurrency(
+                loan.maxLoanAmount || loan.minLoanAmount
+              )}`,
+
+              // Age
+              minAge: loan.minAge,
+              maxAge: loan.maxAge,
+              ageDisplay: formatRangeValue(
+                loan.minAge,
+                loan.maxAge,
+                " Years",
+                "upto"
+              ),
+
+              // Tenure
+              termYears: loan.tenure,
+              tenureDisplay: `upto ${loan.tenure} Years`,
+
+              cibilScore: loan.cibilScore,
+
+              // Logo
+              logo: loan.bankLogo
+                ? `data:image/png;base64,${loan.bankLogo}`
+                : null,
+            }))
+          : [];
+
+        setAvailableLoans(transformedLoans);
+      } catch (error) {
+        console.error("Error fetching loans:", error);
+        setAvailableLoans([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLoans();
+  }, [selectedCategory, page]);
 
   if (!showLoanList && !showComparison) {
     return (
@@ -120,6 +171,10 @@ const CompareLoans = () => {
         onBack={resetToCategories}
         getCategoryDisplayName={getCategoryDisplayName}
         loading={loading}
+        // Passing Pagination Props
+        page={page}
+        hasMore={hasMore}
+        onPageChange={handlePageChange}
       />
     );
   }
@@ -128,8 +183,6 @@ const CompareLoans = () => {
     return (
       <ComparisonTable
         selectedLoans={selectedLoans}
-        sortBy={sortBy}
-        setSortBy={setSortBy}
         onBack={backToLoanSelection}
         getCategoryDisplayName={getCategoryDisplayName}
       />
